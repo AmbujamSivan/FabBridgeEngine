@@ -1,7 +1,121 @@
-﻿@page "/"
+@page "/"
+@rendermode InteractiveServer
+@using Dashboard.Hubs
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+@inject NavigationManager Nav
 
-<PageTitle>Home</PageTitle>
+<PageTitle>FabBridge — Live Status</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="fb-header">
+    <h1>FabBridge — Live Equipment Status</h1>
+    <span class="fb-conn @(_connected ? "up" : "down")">
+        @(_connected ? "● live" : "○ connecting…")
+    </span>
+</div>
 
-Welcome to your new app.
+@if (_states.Count == 0)
+{
+    <p class="fb-waiting">Waiting for equipment events…</p>
+}
+else
+{
+    <div class="fb-grid">
+        @foreach (var s in _states.Values.OrderBy(v => v.EquipmentId))
+        {
+            <div class="fb-tile" style="background:@Background(s.State)">
+                <div class="fb-tile-id">@s.EquipmentId</div>
+                <div class="fb-tile-state">@s.State</div>
+                <div class="fb-tile-meta">CEID @s.SourceCeid · @s.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+            </div>
+        }
+    </div>
+}
+
+<h2 class="fb-log-title">Recent events</h2>
+<table class="fb-log">
+    <thead>
+        <tr><th>Time</th><th>Equipment</th><th>State</th><th>CEID</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var e in _log)
+        {
+            <tr>
+                <td>@e.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</td>
+                <td>@e.EquipmentId</td>
+                <td><span class="fb-dot" style="background:@Background(e.State)"></span>@e.State</td>
+                <td>@e.SourceCeid</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<style>
+    .fb-header { display:flex; align-items:center; gap:1rem; }
+    .fb-header h1 { font-size:1.4rem; margin:0; }
+    .fb-conn { font-size:.85rem; padding:.15rem .5rem; border-radius:1rem; }
+    .fb-conn.up { color:#0a7d33; background:#e4f6e8; }
+    .fb-conn.down { color:#8a6d00; background:#fbf3d5; }
+    .fb-waiting { color:#666; font-style:italic; }
+    .fb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; margin:1rem 0 2rem; }
+    .fb-tile { border-radius:.6rem; padding:1rem; color:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15);
+               transition:background .35s ease; }
+    .fb-tile-id { font-weight:600; font-size:1.05rem; }
+    .fb-tile-state { font-size:1.6rem; font-weight:700; margin:.35rem 0; letter-spacing:.02em; }
+    .fb-tile-meta { font-size:.78rem; opacity:.9; }
+    .fb-log-title { font-size:1.05rem; }
+    .fb-log { border-collapse:collapse; width:100%; max-width:640px; font-size:.85rem; }
+    .fb-log th, .fb-log td { text-align:left; padding:.3rem .6rem; border-bottom:1px solid #eee; }
+    .fb-dot { display:inline-block; width:.7rem; height:.7rem; border-radius:50%; margin-right:.45rem; vertical-align:middle; }
+</style>
+
+@code {
+    // Current state per tool (keyed by equipment id) and a short rolling event log.
+    private readonly Dictionary<string, EquipmentStatusUpdate> _states = new();
+    private readonly LinkedList<EquipmentStatusUpdate> _log = new();
+    private const int MaxLog = 15;
+
+    private HubConnection? _hub;
+    private bool _connected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Connect to the same server's hub as a SignalR client (as any external client would).
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri(EquipmentHub.Route))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Every broadcast updates the current-state map and prepends to the log.
+        _hub.On<EquipmentStatusUpdate>(EquipmentHub.StateChangedEvent, async update =>
+        {
+            _states[update.EquipmentId] = update;
+            _log.AddFirst(update);
+            while (_log.Count > MaxLog) _log.RemoveLast();
+            await InvokeAsync(StateHasChanged);   // re-render on the UI thread
+        });
+
+        _hub.Reconnected += _ => { _connected = true;  return InvokeAsync(StateHasChanged); };
+        _hub.Closed      += _ => { _connected = false; return InvokeAsync(StateHasChanged); };
+
+        await _hub.StartAsync();
+        _connected = true;
+    }
+
+    // Map an MES state to a tile color.
+    private static string Background(string state) => state switch
+    {
+        "Running"     => "#2e9e4f",   // green
+        "Idle"        => "#6b7280",   // gray
+        "Alarm"       => "#d64545",   // red
+        "Maintenance" => "#d99a1c",   // amber
+        "Down"        => "#7a1f1f",   // dark red
+        _             => "#9aa3af",   // unknown
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
+}
