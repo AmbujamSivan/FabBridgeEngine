@@ -3,6 +3,7 @@ using FabBridgeEngine.Core.Interfaces;
 using FabBridgeEngine.Core.Simulation;
 using FabBridgeEngine.Core.Translation;
 using FabBridgeEngine.Host;
+using FabBridgeEngine.Persistence;
 
 // ── Wire the pipeline by hand (we'll switch to DI when we add the web host) ─────────────
 //
@@ -12,9 +13,19 @@ using FabBridgeEngine.Host;
 //
 // Every arrow is an interface, so any box is swappable in isolation.
 
+// Connection string comes from env var FABBRIDGE_SQL, with a local-Docker default.
+var connectionString = Environment.GetEnvironmentVariable("FABBRIDGE_SQL")
+    ?? "Server=localhost,1433;Database=FabBridge;User Id=sa;Password=FabBridge!2026;TrustServerCertificate=True;";
+
 var channel   = new SecsEventChannel(capacity: 10_000);
 var translator = CeidTranslator.CreateDefault();
-var sinks     = new IStateChangeSink[] { new ConsoleStateChangeSink() };
+
+// Two sinks now, added without touching the worker: print to console AND persist to SQL.
+var sinks = new IStateChangeSink[]
+{
+    new ConsoleStateChangeSink(),
+    new SqlTelemetrySink(connectionString),
+};
 
 var worker = new TranslationWorker(channel, translator, sinks);
 IEquipmentSource equipment = new SimulatedEquipment(channel);   // rung 1 (swap for TCP later)
