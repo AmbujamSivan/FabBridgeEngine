@@ -1,6 +1,10 @@
 <Solution>
-  <Project Path="Core.Tests/Core.Tests.csproj" />
-  <Project Path="Core/Core.csproj" />
-  <Project Path="Host/Host.csproj" />
-  <Project Path="Persistence/Persistence.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/Core/Core.csproj" />
+    <Project Path="src/Host/Host.csproj" />
+    <Project Path="src/Persistence/Persistence.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Core.Tests/Core.Tests.csproj" />
+  </Folder>
 </Solution>
