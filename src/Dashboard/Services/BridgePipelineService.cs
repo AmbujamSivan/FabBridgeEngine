@@ -33,7 +33,7 @@ public sealed class BridgePipelineService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("FabBridge pipeline starting (simulated equipment).");
+        _logger.LogInformation("FabBridge pipeline starting ({Source}).", _equipment.GetType().Name);
 
         // Consumer starts first so it's ready before events arrive.
         var workerTask = _worker.RunAsync(stoppingToken);

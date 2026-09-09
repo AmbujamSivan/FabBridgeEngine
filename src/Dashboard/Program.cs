@@ -7,6 +7,7 @@ using FabBridgeEngine.Core.Interfaces;
 using FabBridgeEngine.Core.Simulation;
 using FabBridgeEngine.Core.Translation;
 using FabBridgeEngine.Persistence;
+using FabBridgeEngine.Transport;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,8 +32,43 @@ builder.Services.AddSingleton<IStateChangeSink, SignalRStateChangeSink>();
 builder.Services.AddSingleton<IStateChangeSink>(_ => new SqlTelemetrySink(connectionString));
 
 builder.Services.AddSingleton<TranslationWorker>();
-builder.Services.AddSingleton<IEquipmentSource>(sp =>
-    new SimulatedEquipment(sp.GetRequiredService<IEventProducer>()));
+
+// ── Equipment source: rung 1 (in-process) or rung 3 (TCP), chosen by config ─────
+//   "Equipment": { "Mode": "Simulated" | "Tcp",
+//                  "Tcp": { "Host": "...", "Port": 5555, "HostSimulator": true } }
+var equip = builder.Configuration.GetSection("Equipment");
+var mode = equip["Mode"] ?? "Simulated";
+
+if (string.Equals(mode, "Tcp", StringComparison.OrdinalIgnoreCase))
+{
+    var host = equip["Tcp:Host"] ?? "127.0.0.1";
+    var port = int.TryParse(equip["Tcp:Port"], out var p) ? p : 5555;
+    var hostSimulator = bool.TryParse(equip["Tcp:HostSimulator"], out var hs) && hs;
+
+    if (hostSimulator)
+    {
+        // Also run the fake equipment server in-process (demo convenience).
+        builder.Services.AddSingleton(_ => new TcpEquipmentSimulator(port));
+        builder.Services.AddHostedService<EquipmentSimulatorHostedService>();
+    }
+
+    builder.Services.AddSingleton<IEquipmentSource>(sp =>
+    {
+        // If we host the simulator, connect to the port it actually bound (handles port 0).
+        var effectivePort = hostSimulator
+            ? sp.GetRequiredService<TcpEquipmentSimulator>().Port
+            : port;
+        var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("TcpHsmsSource");
+        return new TcpHsmsSource(
+            sp.GetRequiredService<IEventProducer>(), host, effectivePort,
+            log: msg => log.LogInformation("{Message}", msg));
+    });
+}
+else
+{
+    builder.Services.AddSingleton<IEquipmentSource>(sp =>
+        new SimulatedEquipment(sp.GetRequiredService<IEventProducer>()));
+}
 
 builder.Services.AddHostedService<BridgePipelineService>();
 
