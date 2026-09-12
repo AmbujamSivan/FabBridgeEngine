@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Persistence\Persistence.csproj" />
     <ProjectReference Include="..\Transport\Transport.csproj" />
     <ProjectReference Include="..\Messaging\Messaging.csproj" />
+    <ProjectReference Include="..\SecsGem\SecsGem.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -8,6 +8,7 @@ using FabBridgeEngine.Core.Simulation;
 using FabBridgeEngine.Core.Translation;
 using FabBridgeEngine.Messaging;
 using FabBridgeEngine.Persistence;
+using FabBridgeEngine.SecsGem;
 using FabBridgeEngine.Transport;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -78,6 +79,34 @@ if (string.Equals(mode, "Tcp", StringComparison.OrdinalIgnoreCase))
         return new TcpHsmsSource(
             sp.GetRequiredService<IEventProducer>(), host, effectivePort,
             log: msg => log.LogInformation("{Message}", msg));
+    });
+}
+else if (string.Equals(mode, "SecsGem", StringComparison.OrdinalIgnoreCase))
+{
+    var sg = equip.GetSection("SecsGem");
+    var sgHost = sg["Host"] ?? "127.0.0.1";
+    var sgPort = int.TryParse(sg["Port"], out var sp2) ? sp2 : 5000;
+    var deviceId = ushort.TryParse(sg["DeviceId"], out var dev) ? dev : (ushort)0;
+    var equipmentId = sg["EquipmentId"] ?? "ETCH-07";
+    var hostSimulator = bool.TryParse(sg["HostSimulator"], out var hs2) && hs2;
+
+    if (hostSimulator)
+    {
+        // Also run the passive GEM tool in-process (demo convenience).
+        builder.Services.AddSingleton(sp =>
+        {
+            var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("SecsEquipment");
+            return new Secs4NetEquipmentSimulator(sgPort, deviceId, equipmentId,
+                log: msg => log.LogInformation("{Message}", msg));
+        });
+        builder.Services.AddHostedService<SecsGemSimulatorHostedService>();
+    }
+
+    builder.Services.AddSingleton<IEquipmentSource>(sp =>
+    {
+        var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Secs4NetSource");
+        return new Secs4NetSource(sp.GetRequiredService<IEventProducer>(),
+            sgHost, sgPort, deviceId, equipmentId, msg => log.LogInformation("{Message}", msg));
     });
 }
 else
