@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FabBridgeEngine — SECS/GEM → MES Bridge</title>
+<meta name="description" content="A production-grade C#/.NET 8 microservice bridge that ingests SECS-II equipment events, translates them to MES states, and streams them live — built up a five-rung fidelity ladder from in-process simulation to a real SECS/GEM (HSMS) stack.">
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --ink: #1c2430; --muted: #5b6775;
+    --line: #e2e8f0; --accent: #0f766e; --accent-2: #2563eb;
+    --green: #2e9e4f; --red: #d64545; --amber: #d99a1c; --slate: #6b7280;
+    --code-bg: #0f1729; --code-ink: #e6edf7;
+    --shadow: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.06);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #9aa7b4;
+      --line: #263140; --accent: #2dd4bf; --accent-2: #60a5fa;
+      --code-bg: #0b1020; --code-ink: #dbe4f0;
+      --shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 20px; }
+  code, pre, .mono { font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; }
+
+  /* Hero */
+  header.hero {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff; padding: 62px 0 54px;
+  }
+  header.hero .wrap { padding-top: 0; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: 12px; font-weight: 700; opacity: .85; }
+  h1 { font-size: clamp(30px, 5vw, 46px); margin: 8px 0 10px; line-height: 1.1; letter-spacing: -.02em; }
+  .tagline { font-size: clamp(16px, 2.4vw, 20px); max-width: 62ch; opacity: .95; margin: 0 0 22px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+  .badge {
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+    padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 700; font-size: 14px;
+    background: #fff; color: var(--accent); border: 1px solid transparent;
+  }
+  .btn.ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,.5); }
+  .btn:hover { text-decoration: none; opacity: .93; }
+
+  /* Sections */
+  section { padding: 44px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  h2 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 .num { color: var(--accent); font-weight: 800; margin-right: 10px; }
+  .lead { color: var(--muted); margin: 0 0 22px; max-width: 70ch; }
+  h3 { font-size: 17px; margin: 22px 0 8px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; }
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  /* Thesis callout */
+  .thesis { border-left: 4px solid var(--accent); background: var(--panel);
+    padding: 16px 20px; border-radius: 0 var(--radius) var(--radius) 0; box-shadow: var(--shadow); font-size: 17px; }
+  .thesis b { color: var(--accent); }
+
+  /* Mermaid */
+  .diagram { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px; overflow-x: auto; }
+  .mermaid { display: flex; justify-content: center; min-width: 520px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  td code { background: rgba(127,127,127,.13); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 700; }
+
+  /* Rung ladder */
+  .rung { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: start;
+    padding: 16px 0; border-bottom: 1px dashed var(--line); }
+  .rung:last-child { border-bottom: none; }
+  .rung .n { font-size: 30px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+  .rung .n small { display: block; font-size: 10px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-top: 4px;}
+  .rung h4 { margin: 0 0 4px; font-size: 16px; }
+  .rung p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .rung .tag { font-size: 12px; color: var(--accent); font-weight: 700; }
+
+  /* Principle cards */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; }
+  .card h4 { margin: 0 0 6px; font-size: 15.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* Code block */
+  pre.code { background: var(--code-bg); color: var(--code-ink); border-radius: var(--radius);
+    padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.6; }
+  pre.code .c { color: #7d8aa5; }
+  pre.code .k { color: #7dd3fc; }
+
+  .stat-row { display: flex; flex-wrap: wrap; gap: 14px; }
+  .stat { flex: 1 1 130px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 16px; text-align: center; }
+  .stat .big { font-size: 30px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .stat .lbl { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+
+  footer { padding: 34px 0 60px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; align-items: center; }
+  .note { font-size: 13px; color: var(--muted); }
+  ul.tight { margin: 8px 0 0; padding-left: 20px; }
+  ul.tight li { margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Semiconductor Manufacturing · Industrial IoT · .NET</div>
+    <h1>FabBridgeEngine</h1>
+    <p class="tagline">A production-grade C#/.NET&nbsp;8 microservice bridge that ingests <b>SECS-II</b> equipment events over <b>HSMS</b>, translates cryptic collection-event IDs into meaningful <b>MES states</b>, persists them, and streams them live to a dashboard — built up a five-rung fidelity ladder from in-process simulation to a real <b>SECS/GEM</b> stack.</p>
+    <div class="badges">
+      <span class="badge">.NET 8 / C#</span>
+      <span class="badge">SECS-II · HSMS · GEM</span>
+      <span class="badge">System.Threading.Channels</span>
+      <span class="badge">Blazor Server + SignalR</span>
+      <span class="badge">Dapper + SQL Server</span>
+      <span class="badge">MQTT</span>
+      <span class="badge">secs4net</span>
+      <span class="badge">Docker</span>
+      <span class="badge">xUnit · 28 tests</span>
+    </div>
+    <div class="cta">
+      <a class="btn" href="https://github.com/AmbujamSivan/FabBridgeEngine" target="_blank" rel="noopener">View source on GitHub →</a>
+      <a class="btn ghost" href="#ladder">The fidelity ladder</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="overview">
+  <div class="wrap">
+    <h2>What it is</h2>
+    <p class="lead">Fab equipment speaks a 1980s binary protocol (SECS-II) over TCP (HSMS). A factory's MES ("brain") doesn't care about cryptic event numbers like <code>CEID&nbsp;201</code> — it cares about states like <code>RUNNING</code>, <code>ALARM</code>, <code>MAINTENANCE</code>. FabBridgeEngine is the adapter between those two worlds.</p>
+    <p class="thesis">The whole system exists to perform one transformation — <b>SecsEvent&nbsp;→&nbsp;EquipmentStateChange</b> — ingesting events fast, translating them, and fanning the result out to wherever it needs to go. Everything else (channel, worker, four sinks, dashboard) is plumbing around that core, and a set of well-placed interfaces lets the system grow <b>at its edges, never its core</b>.</p>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <h2>Architecture</h2>
+    <p class="lead">A decoupled ingestion pipeline: a bursty producer feeds a bounded in-memory channel; a steady worker drains it, translates each event, and fans the result out to independent sinks with per-sink fault isolation.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  EQ["Factory Equipment / GEM Tool"] -->|"SECS-II over HSMS (S6F11)"| RCV["Equipment Source<br/>(IEquipmentSource)"]
+  RCV -->|"SecsEvent"| CH[("Bounded Channel<br/>backpressure, FIFO")]
+  CH -->|"await foreach"| TR["Translation Worker<br/>CEID → MES State"]
+  TR --> FAN{{"Fan-out<br/>IStateChangeSink[]"}}
+  FAN --> SQL[("SQL Server<br/>Dapper · stored proc<br/>audit trail")]
+  FAN --> HUB["SignalR Hub"]
+  FAN --> MQTT["MQTT Broker<br/>retained per-tool"]
+  HUB --> DASH["Blazor Live<br/>Status Dashboard"]
+  MQTT --> SUBS["Downstream subscribers<br/>MES · analytics · dashboards"]
+
+  classDef core fill:#0f766e,stroke:#0b5c55,color:#fff;
+  classDef sink fill:#2563eb,stroke:#1e50c0,color:#fff;
+  class RCV,CH,TR,FAN core;
+  class SQL,HUB,MQTT sink;
+      </pre>
+    </div>
+  </div>
+</section>
+
+<section id="translation">
+  <div class="wrap">
+    <h2>The core translation</h2>
+    <p class="lead">A raw <code>SecsEvent</code> carries an equipment id, a numeric <code>CEID</code>, and a bag of report values. The translator maps the CEID to a meaningful state — as <em>data, not code</em> (an injected dictionary), so a new tool is a config change, not a code change. Unknown CEIDs degrade to <code>Unknown</code> rather than throwing, because a 24/7 bridge must never crash on an unexpected event.</p>
+    <div class="scroll panel">
+      <table>
+        <thead><tr><th>CEID</th><th>Meaning</th><th>MES State</th></tr></thead>
+        <tbody>
+          <tr><td><code>101</code></td><td>process started</td><td><span class="pill" style="background:var(--green)">Running</span></td></tr>
+          <tr><td><code>102</code></td><td>process completed</td><td><span class="pill" style="background:var(--slate)">Idle</span></td></tr>
+          <tr><td><code>201</code></td><td>alarm set</td><td><span class="pill" style="background:var(--red)">Alarm</span></td></tr>
+          <tr><td><code>202</code></td><td>alarm cleared</td><td><span class="pill" style="background:var(--slate)">Idle</span></td></tr>
+          <tr><td><code>301</code></td><td>entered maintenance</td><td><span class="pill" style="background:var(--amber)">Maintenance</span></td></tr>
+          <tr><td><code>302</code></td><td>maintenance done</td><td><span class="pill" style="background:var(--slate)">Idle</span></td></tr>
+          <tr><td><code>401</code></td><td>comms/heartbeat lost</td><td><span class="pill" style="background:#7a1f1f">Down</span></td></tr>
+          <tr><td><em>other</em></td><td>unrecognized</td><td><span class="pill" style="background:#9aa3af">Unknown</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:12px">Translation is intentionally lossy (many CEIDs → one state), so every state change keeps its originating <code>SourceCeid</code> for the audit trail — you can always reconstruct <em>why</em> a tool became Idle.</p>
+  </div>
+</section>
+
+<section id="ladder">
+  <div class="wrap">
+    <h2>The fidelity ladder</h2>
+    <p class="lead">The equipment side was built as a ladder you climb — each rung adds one layer of real-world fidelity (transport, framing, a broker, the real protocol) while the entire downstream pipeline stays <em>identical</em>. Every rung is just a different <code>IEquipmentSource</code>, selectable by config.</p>
+
+    <div class="panel">
+      <div class="rung">
+        <div class="n">1<small>logic</small></div>
+        <div><h4>In-process simulator</h4>
+          <p>A fake fab tool generates a realistic, jittered lifecycle (start → run → occasional alarm → complete → maintenance) straight into the channel. Exercises the pipeline logic with zero infrastructure.</p></div>
+      </div>
+      <div class="rung">
+        <div class="n">2<small>bytes</small></div>
+        <div><h4>SECS-II framing</h4>
+          <p>Length-prefixed binary frames — the idea that makes any TCP transport work: a boundary marker so the receiver knows where each message ends.</p></div>
+      </div>
+      <div class="rung">
+        <div class="n">3<small>socket</small></div>
+        <div><h4>Real TCP transport <span class="tag">feature/tcp-hsms</span></h4>
+          <p>A TCP equipment server streams framed events; a client reassembles them across arbitrary packet boundaries (<code>ReadExactly</code>), with reconnect. Exercises sockets, fragmentation, connection lifecycle, and backpressure spanning the network.</p></div>
+      </div>
+      <div class="rung">
+        <div class="n">4<small>pipeline</small></div>
+        <div><h4>MQTT broker <span class="tag">feature/mqtt-pipeline</span></h4>
+          <p>Translated states publish to an MQTT broker (retained, one topic per tool) so the dashboard is no longer the only consumer — a real distributed pipeline. Added as one more sink, zero changes to the worker.</p></div>
+      </div>
+      <div class="rung">
+        <div class="n">5<small>protocol</small></div>
+        <div><h4>Real SECS/GEM via secs4net <span class="tag">feature/secs4net</span></h4>
+          <p>Genuine HSMS with the full Select handshake, real SECS-II <code>Item</code> trees, and an actual <code>S6F11 → S6F12</code> request/ack exchange. Standard-conformant — it would talk to a real tool. One HSMS connection = one tool.</p></div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">The equipment lifecycle generator is written <em>once</em> and reused across rungs 1, 3, and 5 — driving an in-memory queue, a raw socket, and a real GEM link unchanged — purely because it writes to an <code>IEventProducer</code> seam.</p>
+  </div>
+</section>
+
+<section id="principles">
+  <div class="wrap">
+    <h2>Design principles</h2>
+    <p class="lead">The recurring thesis, made concrete in code.</p>
+    <div class="grid g2">
+      <div class="card"><h4>Dependencies point inward</h4><p>The <code>Core</code> domain library depends on <em>nothing</em> — SQL, TCP, MQTT, and SECS/GEM are outer details plugged into Core's interfaces. That's why Core's tests run in milliseconds with no infrastructure.</p></div>
+      <div class="card"><h4>Interfaces at every seam</h4><p><code>IEquipmentSource</code>, <code>IEventChannel</code> (split into producer/consumer), and <code>IStateChangeSink</code> let each end be swapped in isolation. The worker never changed while SQL, SignalR, TCP, MQTT, and SECS/GEM were all added around it.</p></div>
+      <div class="card"><h4>Bounded channel = backpressure</h4><p>A bounded queue applies backpressure instead of growing memory without limit — for a 24/7 bridge, slowing down is acceptable; losing events or an OOM crash is not.</p></div>
+      <div class="card"><h4>Fault isolation &amp; graceful degradation</h4><p>Each sink publish is isolated: a transient DB blip can't stop live dashboard updates. Unknown events and dropped links are handled, never fatal. Reconnect loops distinguish shutdown from failure.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <h2>Stack &amp; structure</h2>
+    <div class="grid g2">
+      <div>
+        <h3>Technology</h3>
+        <ul class="tight">
+          <li><b>.NET 8 / C#</b> — records, async streams, <code>System.Threading.Channels</code></li>
+          <li><b>Blazor Server + SignalR</b> — live, push-based status tiles</li>
+          <li><b>Dapper + SQL Server</b> (Docker) — stored-procedure telemetry writes</li>
+          <li><b>MQTT</b> (Mosquitto) — retained per-tool state for downstream consumers</li>
+          <li><b>secs4net 3.1</b> — real HSMS/SECS-II protocol stack</li>
+          <li><b>xUnit</b> — 28 tests incl. real loopback socket &amp; HSMS integration</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Project layout</h3>
+<pre class="code"><span class="c">src/</span>
+  Core/         <span class="c"># pure domain (no deps)</span>
+  Persistence/  <span class="c"># Dapper + SQL</span>
+  Transport/    <span class="c"># TCP/HSMS framing (rung 3)</span>
+  Messaging/    <span class="c"># MQTT publish (rung 4)</span>
+  SecsGem/      <span class="c"># real secs4net (rung 5)</span>
+  Dashboard/    <span class="c"># Blazor + SignalR</span>
+  Host/         <span class="c"># console runner</span>
+<span class="c">tests/</span>       <span class="c"># Core · Transport · Messaging · SecsGem</span></pre>
+      </div>
+    </div>
+
+    <h3 style="margin-top:26px">Run any rung from config</h3>
+<pre class="code"><span class="k">Equipment__Mode=Simulated</span>  dotnet run --project src/Dashboard   <span class="c"># rung 1</span>
+<span class="k">Equipment__Mode=Tcp</span>        dotnet run --project src/Dashboard   <span class="c"># rung 3</span>
+<span class="k">Equipment__Mode=SecsGem</span>    dotnet run --project src/Dashboard   <span class="c"># rung 5</span></pre>
+  </div>
+</section>
+
+<section id="tests">
+  <div class="wrap">
+    <h2>Verification</h2>
+    <p class="lead">Every layer is tested at the right altitude — pure logic in isolation, and real sockets / real HSMS where the hard bugs live.</p>
+    <div class="stat-row">
+      <div class="stat"><div class="big">28</div><div class="lbl">tests, all green</div></div>
+      <div class="stat"><div class="big">11</div><div class="lbl">Core (domain)</div></div>
+      <div class="stat"><div class="big">9</div><div class="lbl">Transport (TCP/framing)</div></div>
+      <div class="stat"><div class="big">3</div><div class="lbl">Messaging (MQTT)</div></div>
+      <div class="stat"><div class="big">5</div><div class="lbl">SecsGem (HSMS)</div></div>
+    </div>
+    <p class="note" style="margin-top:14px">Highlights: frame reassembly tested at one byte per read (worst-case fragmentation); a real loopback socket loop; and a genuine HSMS Select handshake exchanging <code>S6F11</code>/<code>S6F12</code>.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>Built by <b>Ambujam Sivan</b> · C#/.NET · Semiconductor MES integration</div>
+    <div><a href="https://github.com/AmbujamSivan/FabBridgeEngine" target="_blank" rel="noopener">github.com/AmbujamSivan/FabBridgeEngine</a></div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: prefersDark ? 'dark' : 'neutral',
+    flowchart: { curve: 'basis', useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

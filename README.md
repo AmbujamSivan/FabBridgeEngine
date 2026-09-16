@@ -1,5 +1,7 @@
 # FabBridgeEngine
 
+**📊 [Live project overview →](https://ambujamsivan.github.io/FabBridgeEngine/)** — rendered architecture, the fidelity ladder, and design notes.
+
 A SECS-II → MES bridge in C# / .NET 8. It ingests equipment collection events
 (`S6F11` / `CEID`), translates them into MES operational states (`Running`, `Alarm`, …),
 persists them to SQL Server, and (soon) streams them live to a Blazor dashboard.
