@@ -6,6 +6,7 @@ using FabBridgeEngine.Core.Ingestion;
 using FabBridgeEngine.Core.Interfaces;
 using FabBridgeEngine.Core.Simulation;
 using FabBridgeEngine.Core.Translation;
+using FabBridgeEngine.Messaging;
 using FabBridgeEngine.Persistence;
 using FabBridgeEngine.Transport;
 
@@ -30,6 +31,21 @@ var connectionString = builder.Configuration.GetConnectionString("FabBridge")
     ?? "Server=localhost,1433;Database=FabBridge;User Id=sa;Password=FabBridge!2026;TrustServerCertificate=True;";
 builder.Services.AddSingleton<IStateChangeSink, SignalRStateChangeSink>();
 builder.Services.AddSingleton<IStateChangeSink>(_ => new SqlTelemetrySink(connectionString));
+
+// Optional fourth sink: publish to an MQTT broker for downstream consumers.
+var mqtt = builder.Configuration.GetSection("Mqtt");
+if (bool.TryParse(mqtt["Enabled"], out var mqttOn) && mqttOn)
+{
+    var mqttHost = mqtt["Host"] ?? "localhost";
+    var mqttPort = int.TryParse(mqtt["Port"], out var mp) ? mp : 1883;
+    var prefix = mqtt["TopicPrefix"] ?? "fab/equipment";
+    builder.Services.AddSingleton<IStateChangeSink>(sp =>
+    {
+        var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("MqttSink");
+        return new MqttStateChangeSink(mqttHost, mqttPort, prefix,
+            log: msg => log.LogInformation("{Message}", msg));
+    });
+}
 
 builder.Services.AddSingleton<TranslationWorker>();
 
