@@ -55,7 +55,10 @@ public sealed class MqttStateChangeSink : IStateChangeSink, IAsyncDisposable
 
     public static string BuildPayload(EquipmentStateChange change) =>
         JsonSerializer.Serialize(new MqttStatePayload(
-            change.EquipmentId, change.State.ToString(), (int)change.SourceCeid, change.Timestamp));
+            change.EquipmentId, 
+            change.State.ToString(), 
+            (int)change.SourceCeid, 
+            change.Timestamp));
 
     public async ValueTask PublishAsync(EquipmentStateChange change, CancellationToken ct = default)
     {

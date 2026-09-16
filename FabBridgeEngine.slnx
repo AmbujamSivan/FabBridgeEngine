@@ -5,11 +5,13 @@
     <Project Path="src/Host/Host.csproj" />
     <Project Path="src/Messaging/Messaging.csproj" />
     <Project Path="src/Persistence/Persistence.csproj" />
+    <Project Path="src/SecsGem/SecsGem.csproj" />
     <Project Path="src/Transport/Transport.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Core.Tests/Core.Tests.csproj" />
     <Project Path="tests/Messaging.Tests/Messaging.Tests.csproj" />
+    <Project Path="tests/SecsGem.Tests/SecsGem.Tests.csproj" />
     <Project Path="tests/Transport.Tests/Transport.Tests.csproj" />
   </Folder>
 </Solution>
